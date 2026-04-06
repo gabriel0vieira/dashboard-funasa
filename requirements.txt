@@ -1,6 +1,5 @@
-dash
-plotly
+streamlit
 pandas
+plotly
 sqlalchemy
 pymssql
-gunicorn
