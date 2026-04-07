@@ -44,7 +44,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# BANCO
+# BANCO (QUERY CORRIGIDA)
 # =========================
 @st.cache_data
 def carregar_dados():
@@ -54,16 +54,24 @@ def carregar_dados():
 
         engine = create_engine(URL)
 
+        # 🔥 QUERY PROFISSIONAL (SEM PERDER MUNICÍPIOS)
         query = """
-        SELECT TOP 10000 *
+        SELECT 
+            nome_municipio,
+            uf_sigla,
+            regiao_nome,
+            ano_aih,
+            AVG(latitude) as latitude,
+            AVG(longitude) as longitude,
+            SUM(vl_total) as gasto
         FROM dbo.sus_aih
         WHERE ano_aih IN (2019, 2025)
+        GROUP BY nome_municipio, uf_sigla, regiao_nome, ano_aih
         """
 
         df = pd.read_sql(query, engine)
 
-        df['gasto'] = pd.to_numeric(df['vl_total'], errors='coerce').fillna(0)
-        df['mes_aih'] = pd.to_numeric(df['mes_aih'], errors='coerce')
+        df['gasto'] = pd.to_numeric(df['gasto'], errors='coerce').fillna(0)
         df['ano_aih'] = df['ano_aih'].astype(str)
 
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
@@ -128,15 +136,14 @@ with col2:
 col1, col2 = st.columns(2)
 
 with col1:
-    df_bar = df_filtrado.groupby('mes_aih')['gasto'].sum().reset_index()
-    fig_bar = px.bar(df_bar, x='mes_aih', y='gasto',
-                     title=f'Investimento Mensal em {ano}: {regiao}')
+    fig_bar = px.bar(df_filtrado.groupby('ano_aih')['gasto'].sum().reset_index(),
+                     x='ano_aih', y='gasto',
+                     title="📊 Investimento por Ano")
     st.plotly_chart(fig_bar, use_container_width=True)
 
 with col2:
-    df_pie = df_filtrado.groupby('uf_sigla')['gasto'].sum().reset_index()
-    fig_pie = px.pie(df_pie, values='gasto', names='uf_sigla', hole=0.5,
-                     title=f'Distribuição por Estado ({regiao})')
+    fig_pie = px.pie(df_filtrado, values='gasto', names='uf_sigla',
+                     title="📍 Distribuição por Estado")
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # =========================
@@ -145,7 +152,6 @@ with col2:
 st.subheader("🗺️ Mapa de Investimentos")
 
 df_geo = df_filtrado.dropna(subset=['latitude', 'longitude'])
-df_geo = df_geo[df_geo['gasto'] > 0]
 
 fig_mapa = px.scatter_mapbox(
     df_geo,
@@ -175,22 +181,7 @@ fig_mapa.update_traces(
 
 fig_mapa.update_layout(
     margin={"r":0,"t":0,"l":0,"b":0},
-    paper_bgcolor='rgba(0,0,0,0)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    legend=dict(
-        title="Ano da AIH",
-        yanchor="top",
-        y=0.98,
-        xanchor="left",
-        x=0.02,
-        bgcolor="white",
-        font=dict(size=12)
-    ),
-    mapbox=dict(
-        bearing=0,
-        pitch=0,
-        zoom=3.8
-    )
+    legend=dict(title="Ano da AIH", bgcolor="white")
 )
 
 st.plotly_chart(fig_mapa, use_container_width=True)
