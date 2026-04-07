@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from sqlalchemy import create_engine
+import folium
+from streamlit.components.v1 import html
 
 # =========================
 # CONFIG
@@ -9,7 +11,7 @@ from sqlalchemy import create_engine
 st.set_page_config(page_title="FUNASA Dashboard", layout="wide")
 
 # =========================
-# ESTILO GLOBAL
+# ESTILO
 # =========================
 st.markdown("""
 <style>
@@ -27,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# HEADER BONITO
+# HEADER
 # =========================
 st.markdown("""
 <div style="
@@ -44,7 +46,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# BANCO (COM CACHE + LIMITE)
+# BANCO
 # =========================
 @st.cache_data
 def carregar_dados():
@@ -98,7 +100,13 @@ with col2:
 df_filtrado = df[(df['ano_aih'] == ano) & (df['regiao_nome'] == regiao)]
 
 # =========================
-# KPIs BONITOS
+# FUNÇÃO REAL
+# =========================
+def formatar_real(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+# =========================
+# KPIs
 # =========================
 col1, col2 = st.columns(2)
 
@@ -140,30 +148,35 @@ with col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # =========================
-# MAPA CORRIGIDO
+# MAPA (FOLIUM TOP)
 # =========================
 st.subheader("🗺️ Mapa de Investimentos")
 
 df_geo = df_filtrado.dropna(subset=['latitude', 'longitude'])
 
-fig_map = px.scatter_mapbox(
-    df_geo,
-    lat="latitude",
-    lon="longitude",
-    size="gasto",
-    color="ano_aih",
-    zoom=3.5,
-    center={"lat": -14.2, "lon": -51.9},
-    height=500
-)
+mapa = folium.Map(location=[-14.2, -51.9], zoom_start=4, tiles="cartodbpositron")
 
-fig_map.update_layout(mapbox_style="carto-positron")
+for _, row in df_geo.iterrows():
 
-fig_map.update_traces(
-    hovertemplate="<b>Município</b><br>Lat: %{lat}<br>Lon: %{lon}<br>Gasto: %{marker.size}<extra></extra>"
-)
+    cor = "#FFA500" if row['ano_aih'] == '2019' else "#0056b3"
+    tamanho = max(4, min(row['gasto'] / 10000, 15))
 
-st.plotly_chart(fig_map, use_container_width=True)
+    folium.CircleMarker(
+        location=[row['latitude'], row['longitude']],
+        radius=tamanho,
+        color=cor,
+        fill=True,
+        fill_color=cor,
+        fill_opacity=0.7,
+        popup=f"""
+        <b>{row['nome_municipio']}</b><br>
+        UF: {row['uf_sigla']}<br>
+        Ano: {row['ano_aih']}<br>
+        Gasto: <b>{formatar_real(row['gasto'])}</b>
+        """
+    ).add_to(mapa)
+
+html(mapa._repr_html_(), height=600)
 
 # =========================
 # TABELA
