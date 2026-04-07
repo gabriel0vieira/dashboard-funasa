@@ -44,7 +44,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# BANCO (QUERY CORRIGIDA)
+# BANCO (SEM GROUP BY 🔥)
 # =========================
 @st.cache_data
 def carregar_dados():
@@ -54,24 +54,23 @@ def carregar_dados():
 
         engine = create_engine(URL)
 
-        # 🔥 QUERY PROFISSIONAL (SEM PERDER MUNICÍPIOS)
         query = """
         SELECT 
             nome_municipio,
             uf_sigla,
             regiao_nome,
             ano_aih,
-            AVG(latitude) as latitude,
-            AVG(longitude) as longitude,
-            SUM(vl_total) as gasto
+            mes_aih,
+            latitude,
+            longitude,
+            vl_total
         FROM dbo.sus_aih
         WHERE ano_aih IN (2019, 2025)
-        GROUP BY nome_municipio, uf_sigla, regiao_nome, ano_aih
         """
 
         df = pd.read_sql(query, engine)
 
-        df['gasto'] = pd.to_numeric(df['gasto'], errors='coerce').fillna(0)
+        df['gasto'] = pd.to_numeric(df['vl_total'], errors='coerce').fillna(0)
         df['ano_aih'] = df['ano_aih'].astype(str)
 
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
@@ -101,9 +100,12 @@ with col1:
     ano = st.selectbox("Ano", sorted(df['ano_aih'].unique()))
 
 with col2:
-    regiao = st.selectbox("Região", df['regiao_nome'].unique())
+    regiao = st.selectbox("Região", ["Todas"] + list(df['regiao_nome'].unique()))
 
-df_filtrado = df[(df['ano_aih'] == ano) & (df['regiao_nome'] == regiao)]
+if regiao == "Todas":
+    df_filtrado = df[df['ano_aih'] == ano]
+else:
+    df_filtrado = df[(df['ano_aih'] == ano) & (df['regiao_nome'] == regiao)]
 
 # =========================
 # KPIs
@@ -136,18 +138,19 @@ with col2:
 col1, col2 = st.columns(2)
 
 with col1:
-    fig_bar = px.bar(df_filtrado.groupby('ano_aih')['gasto'].sum().reset_index(),
-                     x='ano_aih', y='gasto',
-                     title="📊 Investimento por Ano")
+    df_bar = df_filtrado.groupby('mes_aih')['gasto'].sum().reset_index()
+    fig_bar = px.bar(df_bar, x='mes_aih', y='gasto',
+                     title=f'Investimento Mensal em {ano}')
     st.plotly_chart(fig_bar, use_container_width=True)
 
 with col2:
-    fig_pie = px.pie(df_filtrado, values='gasto', names='uf_sigla',
-                     title="📍 Distribuição por Estado")
+    df_pie = df_filtrado.groupby('uf_sigla')['gasto'].sum().reset_index()
+    fig_pie = px.pie(df_pie, values='gasto', names='uf_sigla', hole=0.5,
+                     title='Distribuição por Estado')
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # =========================
-# MAPA IGUAL AO DASH
+# MAPA IGUAL AO DASH 🔥
 # =========================
 st.subheader("🗺️ Mapa de Investimentos")
 
@@ -172,7 +175,7 @@ fig_mapa = px.scatter_mapbox(
 )
 
 fig_mapa.update_traces(
-    marker=dict(opacity=0.7),
+    marker=dict(opacity=0.5),
     hovertemplate=
     "<b>%{hovertext}</b> (%{customdata[1]})<br>" +
     "Ano: %{customdata[2]}<br>" +
